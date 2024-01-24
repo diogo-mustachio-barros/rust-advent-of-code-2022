@@ -1,130 +1,77 @@
 
 // https://adventofcode.com/2022/day/1
 
-use std::cmp::Ordering;
-use std::env;
-use std::fmt::Display;
-use std::fs::File;
-use std::io::{self, BufRead};
-use std::path::Path;
+use std::{env, fs::File, io::{self, BufRead, BufReader, Lines}, path::Path};
 
 fn main() {
     let args:Vec<String> = env::args().collect();
-    let filename;
+    let filename = args.get(1).expect("no input file path given");
 
-    match args.get(1) {
-        None => return (),
-        Some(s) => filename = s
-    }
+    // Read file
+    let lines = read_lines(filename).expect("error reading file");
 
     // Part 1
-    // let elves = calc_top_n_elves(filename, 1);
+    // part_1(lines);
 
     // Part 2
-    let elves = calc_top_n_elves(filename, 3);
-    
-    let mut sum = 0;
-    for elf in elves {
-        println!("{elf}");
-        sum += elf.1;
-    }
-    println!("Total: {sum}");
+    part_2(lines);
 }
 
-struct Elf(i32, i32);
 
-impl Ord for Elf {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.1.cmp(&other.1)
+pub fn part_1(lines: Lines<BufReader<File>>) {
+    match parse_elves(lines).iter().max_by(|a, b| b.1.cmp(&a.1)) {
+        Some(elf) => println!("{}", elf.1),
+        None => println!("no elves"),
     }
 }
 
-impl Eq for Elf {
-    // needed?
-}
+pub fn part_2(lines: Lines<BufReader<File>>) {
+    let top_elves = 3;
 
-impl PartialOrd for Elf {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.1.cmp(&other.1))
-    }
-}
+    let mut elves = parse_elves(lines);
+    elves.sort_by(|a, b| b.1.cmp(&a.1));
+    elves.truncate(top_elves);
 
-impl PartialEq for Elf {
-    fn eq(&self, other: &Self) -> bool {
-        self.1 == other.1
-    }
-}
-
-impl Display for Elf {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Elf[n={}, calories={}]", self.0, self.1)
-    }
-}
-
-fn calc_top_n_elves<P>(filename: P, n:usize) -> Vec<Elf>
-where P: AsRef<Path> {
-    let mut top_n:Vec<Elf> = Vec::new();
-
-    if let Ok(lines) = read_lines(filename) {
-        let mut curr_elf_n = 0;
-        let mut curr_elf_calories:i32 = 0;
-
-        for line in lines {
-            if let Ok(str) = line {
-                if str == "" 
-                {
-                    top_n = update_top_n(top_n, Elf(curr_elf_n, curr_elf_calories), n);
-    
-                    curr_elf_n += 1;
-                    curr_elf_calories = 0;
-                } 
-                else 
-                {
-                    curr_elf_calories += str.parse::<i32>().unwrap();
-                }
-            }
-        }
-
-        top_n = update_top_n(top_n, Elf(curr_elf_n, curr_elf_calories), n);
-    }
-    
-    return top_n;
-}
-
-fn update_top_n(mut top_n:Vec<Elf>, elf:Elf, n:usize) -> Vec<Elf>{
-    if top_n.len() < n 
-    {
-        top_n = push_sorted(top_n, elf);
-    } 
-    else if elf.1 > top_n.get(n-1).unwrap().1 
-    {
-        top_n.remove(n-1);
-        top_n = push_sorted(top_n, elf);
+    for elf in elves.iter() {
+        println!("Elf {} has {} calories", elf.0+1, elf.1);
     }
 
-    return top_n;
+    let sum = elves.iter().map(|a| a.1).sum::<i32>();
+    println!("Total calories: {}", sum);
 }
+
 
 // from https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
+// The output is wrapped in a Result to allow matching on errors.
+// Returns an Iterator to the Reader of the lines of the file.
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where P: AsRef<Path> {
+where P: AsRef<Path>, {
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
 }
 
-fn push_sorted<T:Ord+Display> (mut vec:Vec<T>, value:T) -> Vec<T> {
-    let mut insert_i = 0;
+struct Elf(i32, i32);
 
-    for i in 0..vec.len() {
-        let elem = vec.get(i).unwrap();
-        
-        if let Ordering::Greater = value.cmp(elem) {
-            break;
+fn parse_elves(lines: Lines<BufReader<File>>) -> Vec<Elf> {
+    let mut elves:Vec<Elf> = Vec::new();
+    
+    let mut elf_n: i32 = 0;
+    let mut elf_calories:i32 = 0;
+
+    for line in lines.flatten() {
+        match line.parse::<i32>() {
+            Ok(calories) => elf_calories += calories,
+            Err(_) => {
+                elves.push(Elf(elf_n, elf_calories));
+
+                elf_n += 1;
+                elf_calories = 0;
+            },
         }
-
-        insert_i += 1;
     }
-    vec.insert(insert_i, value);
 
-    return vec;
+    // Don't forget the last elf
+    elves.push(Elf(elf_n, elf_calories));
+
+    return elves;
 }

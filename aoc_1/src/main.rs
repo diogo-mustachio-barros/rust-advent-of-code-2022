@@ -5,16 +5,26 @@ use std::{env, fs::File, io::{self, BufRead, BufReader, Lines}, path::Path};
 
 fn main() {
     let args:Vec<String> = env::args().collect();
-    let filename = args.get(1).expect("no input file path given");
+
+    if args.len() < 2 {
+        println!("Use: cargo run <1|2> <input filepath>");
+        return;
+    }
+
+    let part = args.get(1).expect("no part selected");
+    let filename = args.get(2).expect("no input file path given");
 
     // Read file
     let lines = read_lines(filename).expect("error reading file");
 
-    // Part 1
-    // part_1(lines);
-
-    // Part 2
-    part_2(lines);
+    match part.as_str() {
+        // Part 1
+        "1" => part_1(lines),
+        // Part 2
+        "2" => part_2(lines),
+        // Error
+        _ => println!("selected part is invalid"),
+    }
 }
 
 

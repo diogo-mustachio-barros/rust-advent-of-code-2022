@@ -1,21 +1,35 @@
-use std::{path::Path, io::{self, BufRead}, fs::File, env, fmt::Display};
+
+// https://adventofcode.com/2022/day/2
+
+use std::{env,  fs::File, io::{self, BufRead, BufReader, Lines}, path::Path};
 
 fn main() {
     let args:Vec<String> = env::args().collect();
-    let filename;
 
-    match args.get(1) {
-        None => return (),
-        Some(s) => filename = s
+    if args.len() < 2 {
+        println!("Use: cargo run <1|2> <input filepath>");
+        return;
     }
 
-    // Part 1
-    // let result = calc(filename, strategy_1);
-    
-    // Part 2
-    let result = calc(filename, strategy_2);
+    let part = args.get(1).expect("no part selected");
+    let filename = args.get(2).expect("no input file path given");
 
-    println!("{result}");
+    // Read file
+    let lines = read_lines(filename).expect("error reading file");
+
+    match part.as_str() {
+        // Part 1
+        "1" => part_1(lines),
+        // Part 2
+        "2" => part_2(lines),
+        // Error
+        _ => println!("selected part is invalid"),
+    }
+}
+
+pub fn part_1(lines: Lines<BufReader<File>>) {
+    let score = calc(lines, strategy_1);
+    println!("Total score: {}", score);
 }
 
 fn strategy_1(str:&str, _:&RPS) -> RPS {
@@ -23,107 +37,41 @@ fn strategy_1(str:&str, _:&RPS) -> RPS {
         "X" => RPS::Rock,
         "Y" => RPS::Paper,
         "Z" => RPS::Scissors,
-        _ => todo!()
+        s => panic!("could not parse '{}' as a strategy", s)
     }
+}
+
+pub fn part_2(lines: Lines<BufReader<File>>) {
+    let score = calc(lines, strategy_2);
+    println!("Total score: {}", score);
 }
 
 fn strategy_2(str:&str, predicted:&RPS) -> RPS {
     match str {
-        "X" => match predicted {
-            RPS::Rock => RPS::Scissors,
-            RPS::Paper => RPS::Rock,
-            RPS::Scissors => RPS::Paper,
-        },
-        "Y" => match predicted {
-            RPS::Rock => RPS::Rock,
-            RPS::Paper => RPS::Paper,
-            RPS::Scissors => RPS::Scissors,
-        },
-        "Z" => match predicted {
-            RPS::Rock => RPS::Paper,
-            RPS::Paper => RPS::Scissors,
-            RPS::Scissors => RPS::Rock,
-        },
-        _ => todo!()
+        "X" => predicted.wins_against(),  // Outcome is a loss
+        "Y" => predicted.clone(),         // Outcome is a draw
+        "Z" => predicted.loses_against(), // Outcome is a win
+        s => panic!("could not parse '{}' as a strategy", s)
     }
 }
 
-fn calc<P>(filename:P, strategy: fn(&str, &RPS) -> RPS) -> i32
-where P:AsRef<Path> {
-    let mut total_score = 0;
 
-    if let Ok(lines) = read_lines(filename) {
-        for line in lines {
-            if let Ok(str) = line 
-            {
-                let round = Round::from_str(&str, strategy);
-                total_score += round.calc_score();
-            }
-        }
-    }
 
-    return total_score;
+
+// from https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
+// The output is wrapped in a Result to allow matching on errors.
+// Returns an Iterator to the Reader of the lines of the file.
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where P: AsRef<Path>, {
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
 }
 
-enum Outcome {
-    Win, Draw, Lose
-}
-
-impl Outcome {
-    fn get_score(self) -> i32 {
-        match self {
-            Outcome::Win => 6,
-            Outcome::Draw => 3,
-            Outcome::Lose => 0,
-        }
-    }
-}
-
-enum RPS {
-    Rock, Paper, Scissors
-}
-
-impl RPS {
-    fn from_str(str:&str) -> RPS {
-        match str {
-            "A" => RPS::Rock,
-            "B" => RPS::Paper,
-            "C" => RPS::Scissors,
-            _ => todo!()
-        }
-    }
-
-    fn against(&self, other:Self) -> Outcome {
-        match (self, other) {
-            (RPS::Rock, RPS::Scissors) 
-            | (RPS::Scissors, RPS::Paper) 
-            | (RPS::Paper, RPS::Rock) => Outcome::Win,
-            
-            (RPS::Rock, RPS::Rock)
-            | (RPS::Paper, RPS::Paper)
-            | (RPS::Scissors, RPS::Scissors) => Outcome::Draw,
-
-            _ => Outcome::Lose,
-        }
-    }
-
-    fn get_score(self) -> i32 {
-        match self {
-            RPS::Rock => 1,
-            RPS::Paper => 2,
-            RPS::Scissors => 3,
-        }
-    }
-}
-
-impl Display for RPS {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RPS::Rock => write!(f, "Rock"),
-            RPS::Paper => write!(f, "Paper"),
-            RPS::Scissors => write!(f, "Scissors"),
-        }
-    }
+fn calc(lines:Lines<BufReader<File>>, strategy: fn(&str, &RPS) -> RPS) -> i32 {
+    lines.flatten()
+         .into_iter()
+         .map(|line| Round::from_str(&line, strategy).calc_score())
+         .sum()
 }
 
 struct Round {
@@ -142,16 +90,76 @@ impl Round {
     }
 
     fn calc_score(self) -> i32 {
-        let outcome_score = self.played.against(self.predicted).get_score();
+        let outcome = self.played.against(self.predicted);
+        let outcome_score = outcome.get_score();
         let played_score = self.played.get_score();
 
         return outcome_score + played_score;
     }
 }
 
-// from https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where P: AsRef<Path> {
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
+#[derive(PartialEq, Clone)]
+enum RPS {
+    Rock, Paper, Scissors
+}
+
+impl RPS {
+    fn from_str(str:&str) -> RPS {
+        match str {
+            "A" => RPS::Rock,
+            "B" => RPS::Paper,
+            "C" => RPS::Scissors,
+            s => panic!("could not parse '{}' as RPS", s)
+        }
+    }
+
+    fn wins_against(&self) -> RPS {
+        match self {
+            RPS::Rock => RPS::Scissors,
+            RPS::Paper => RPS::Rock,
+            RPS::Scissors => RPS::Paper,
+        }
+    } 
+
+    fn loses_against(&self) -> RPS {
+        match self {
+            RPS::Rock => RPS::Paper,
+            RPS::Paper => RPS::Scissors,
+            RPS::Scissors => RPS::Rock,
+        }
+    }
+
+    fn against(&self, other:Self) -> Outcome {
+        if *self == other {
+            return Outcome::Draw;
+        }
+
+        if *self == other.loses_against() {
+            return Outcome::Win;
+        }
+
+        return Outcome::Lose
+    }
+
+    fn get_score(self) -> i32 {
+        match self {
+            RPS::Rock => 1,
+            RPS::Paper => 2,
+            RPS::Scissors => 3,
+        }
+    }
+}
+
+enum Outcome {
+    Win, Draw, Lose
+}
+
+impl Outcome {
+    fn get_score(self) -> i32 {
+        match self {
+            Outcome::Win => 6,
+            Outcome::Draw => 3,
+            Outcome::Lose => 0,
+        }
+    }
 }

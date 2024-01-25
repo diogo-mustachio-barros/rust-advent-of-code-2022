@@ -1,3 +1,6 @@
+
+// https://adventofcode.com/2022/day/3
+
 use std::{env, path::Path, io::{self, BufRead, BufReader, Lines}, fs::File};
 
 fn main() {

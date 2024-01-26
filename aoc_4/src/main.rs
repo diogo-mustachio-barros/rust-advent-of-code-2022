@@ -1,37 +1,53 @@
-use std::{path::Path, env, io::{self, BufRead}, fs::File, str::FromStr};
+
+// https://adventofcode.com/2022/day/4
+
+use std::{path::Path, env, io::{self, BufRead, BufReader, Lines}, fs::File, str::FromStr};
 
 fn main() {
     let args:Vec<String> = env::args().collect();
-    let filename;
 
-    match args.get(1) {
-        None => return (),
-        Some(s) => filename = s
+    if args.len() < 2 {
+        println!("Use: cargo run <1|2> <input filepath>");
+        return;
     }
 
-    let result = calc(filename, Range::contained_in);
-    println!("{result}");
+    let part = args.get(1).expect("no part selected");
+    let filename = args.get(2).expect("no input file path given");
 
-    let result = calc(filename, Range::overlaps_with);
+    // Read file
+    let lines = read_lines(filename).expect("error reading file");
+
+    match part.as_str() {
+        // Part 1
+        "1" => part_1(lines),
+        // Part 2
+        "2" => part_2(lines),
+        // Error
+        _ => println!("selected part is invalid"),
+    }
+}
+
+pub fn part_1 (lines: Lines<BufReader<File>>) {
+    let result = calc(lines, Range::contained_in);
+    println!("{result}");
+} 
+
+pub fn part_2 (lines: Lines<BufReader<File>>) {
+    let result = calc(lines, Range::overlaps_with);
     println!("{result}");
 }
 
-pub fn calc<P>(filename: P, f:fn(&Range, &Range) -> bool) -> i32
-where P: AsRef<Path> {
+pub fn calc(lines: Lines<BufReader<File>>, f:fn(&Range, &Range) -> bool) -> i32 {
     let mut count = 0;
 
-    if let Ok(lines) = read_lines(filename) {
-        for r_line in lines {
-            if let Ok(line) = r_line {
-                let (range_1_s, range_2_s) = line.split_once(",").unwrap();
+    for line in lines.flatten() {
+        let (range_1_s, range_2_s) = line.split_once(",").unwrap();
 
-                let range_1 = Range::from_str(range_1_s).unwrap();
-                let range_2 = Range::from_str(range_2_s).unwrap();
-                
-                if f(&range_1, &range_2) || f(&range_2, &range_1) {
-                    count += 1;
-                }
-            }
+        let range_1 = Range::from_str(range_1_s);
+        let range_2 = Range::from_str(range_2_s);
+        
+        if f(&range_1, &range_2) || f(&range_2, &range_1) {
+            count += 1;
         }
     }
 
@@ -41,32 +57,20 @@ where P: AsRef<Path> {
 pub struct Range{min:i32, max:i32}
 impl Range {
     fn contained_in(&self, other:&Self) -> bool {
-        if self.min >= other.min && self.max <= other.max {
-            return true;
-        }
-        return false;
+        self.min >= other.min && self.max <= other.max
     }
 
     fn overlaps_with(&self, other:&Self) -> bool {
-        if self.min > other.max || self.max < other.min {
-            return false;
-        }
-        return true;
+        self.min <= other.max && self.max >= other.min
     }
-}
 
-#[derive(Debug)]
-pub struct RangeParseError;
-impl FromStr for Range {
-    type Err = RangeParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Self {
         let (min_s, max_s) = s.split_once("-").unwrap();
 
         let min = i32::from_str(min_s).unwrap();
         let max = i32::from_str(max_s).unwrap();
         
-        return Ok(Range{min, max})
+        return Range{min, max}
     }
 }
 

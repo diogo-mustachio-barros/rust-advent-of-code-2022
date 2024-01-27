@@ -1,5 +1,5 @@
 
-// https://adventofcode.com/2022/day/5
+// https://adventofcode.com/2022/day/6
 
 use std::{collections::VecDeque, env, fs::File, io::{self, BufRead, BufReader, Lines}, path::Path, usize};
 

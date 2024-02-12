@@ -1,32 +1,13 @@
 
 // https://adventofcode.com/2022/day/7
 
-use std::{collections::HashMap, env, fs::File, hash::Hash, io::{self, BufRead, BufReader, Lines}, path::Path};
+use std::{fs::File, io::{BufReader, Lines}};
 
 use regex::Regex;
+use util::{addressable_tree::AddressableTree, advent_of_code::redirect, tree_navigator::TreeNavigator};
 
 fn main() {
-    let args:Vec<String> = env::args().collect();
-
-    if args.len() < 2 {
-        println!("Use: cargo run <1|2> <input filepath>");
-        return;
-    }
-
-    let part = args.get(1).expect("no part selected");
-    let filename = args.get(2).expect("no input file path given");
-
-    // Read file
-    let lines = read_lines(filename).expect("error reading file");
-
-    match part.as_str() {
-        // Part 1
-        "1" => part_1(lines),
-        // Part 2
-        "2" => part_2(lines),
-        // Error
-        _ => println!("selected part is invalid"),
-    }
+    redirect(part_1, part_2);
 }
 
 type FileSystem = AddressableTree<String, Item>;
@@ -47,9 +28,9 @@ pub fn part_1(lines: Lines<BufReader<File>>) {
 
     // gather all dirs with size under 100000
     let dirs = fs.fold(&|fs, mut acc: Vec<Item>| {
-        if let (FileType::Dir, size) = fs.value {
-            if size <= 100000 {
-                acc.push((FileType::Dir, size)); 
+        if let (FileType::Dir, size) = fs.get_value() {
+            if *size <= 100000 {
+                acc.push((FileType::Dir, *size)); 
             }
         }
         return acc;
@@ -65,15 +46,15 @@ pub fn part_1(lines: Lines<BufReader<File>>) {
 }
 
 fn calc_sizes(fs: &FileSystem) -> Item {
-    if let (FileType::File, size) = fs.value 
+    if let (FileType::File, size) = fs.get_value() 
     {
-        return (FileType::File, size);
+        return (FileType::File, *size);
     }
     else
     {
         let mut total_size = 0;
-        for child in fs.children.values() {
-            total_size += child.value.1;
+        for child in fs.get_children() {
+            total_size += child.get_value().1;
         }
         return (FileType::Dir, total_size);
     }
@@ -86,16 +67,16 @@ pub fn part_2(lines: Lines<BufReader<File>>) {
     // recursively calculate file and dir sizes
     fs.map_values(calc_sizes); 
 
-    let total_size = fs.value.1;
+    let total_size = fs.get_value().1;
     let max_size = 70000000;
     let update_size = 30000000;
     let minimum_size = update_size - (max_size - total_size);
     // println!("{}", minimum_size);
 
     let dir = fs.fold(&move |fs, best: Item| {
-        if let (FileType::Dir, size) = fs.value {
-            if size >= minimum_size && size < best.1 {
-                return (FileType::Dir, size);
+        if let (FileType::Dir, size) = fs.get_value() {
+            if *size >= minimum_size && *size < best.1 {
+                return (FileType::Dir, *size);
             }
         }
         return best;
@@ -192,117 +173,4 @@ fn group_commands(mut lines: Lines<BufReader<File>>) -> Vec<(String, Vec<String>
     grouped_lines.push((command, command_output));
 
     return grouped_lines;
-}
-
-// non-empty tree for simplicity
-struct AddressableTree<K, V> {
-    key: K,
-    value: V,
-    children: HashMap<K, AddressableTree<K, V>>,
-}
-
-impl <K: Eq + Hash + PartialEq + Clone, V> AddressableTree<K, V> {
-    pub fn singleton(key: K, value: V) -> AddressableTree<K, V> {
-        AddressableTree { key: key
-                        , value: value
-                        , children: HashMap::new() }
-    }
-
-    pub fn add_child(&mut self, key: K, value: V) {
-        let key_clone = key.clone();
-        self.children.insert(key, AddressableTree::singleton(key_clone, value));
-    }
-
-    pub fn add_child_node(&mut self, key: K, node:AddressableTree<K, V>) {
-        self.children.insert(key, node);
-    }
-
-    pub fn remove_child(&mut self, key: &mut K) -> AddressableTree<K, V> {
-        self.children.remove(key).unwrap()
-    }
-
-    pub fn map_values(&mut self, f: fn(&AddressableTree<K, V>) -> V)
-    {
-        // map children
-        for child in self.children.values_mut() {
-            child.map_values(f);
-        }
-
-        // map value
-        self.value = f(&self);
-    }
-
-    pub fn fold<T>(&self, f: &impl Fn(&AddressableTree<K, V>, T) -> T, initial: T) -> T
-    {
-        let mut acc = initial;
-
-        for child in self.children.values() {
-            acc = child.fold(f, acc);
-        }
-
-        acc = f(self, acc);
-
-        return acc;
-    }
-}
-
-struct TreeNavigator<K, V> {
-    previous: Vec<AddressableTree<K, V>>,
-    current: AddressableTree<K, V>,
-}
-
-impl <K: Eq + Hash + PartialEq + Clone, V> TreeNavigator<K, V> {
-    pub fn new(tree: AddressableTree<K, V>) -> TreeNavigator<K, V> {
-        TreeNavigator {previous: Vec::new(), current: tree}
-    }
-
-    pub fn go_into(mut self, key: &mut K) -> Self {
-        let mut current = self.current;
-        let new_current = current.remove_child(key);
-
-        self.previous.push(current);
-        self.current = new_current;
-
-        return self;
-    }
-
-    pub fn get_out(mut self) -> Self {
-        let current = self.current;
-        let mut new_current = self.previous.pop().unwrap();
-
-        new_current.add_child_node(current.key.clone(), current);
-
-        self.current = new_current;
-        return self;
-    }
-
-    pub fn apply_to_current<F>(mut self, f: F) -> Self
-    where F:FnOnce(AddressableTree<K, V>) -> AddressableTree<K, V> {
-        self.current = f(self.current);
-        return self;
-    }
-
-    pub fn get(mut self) -> AddressableTree<K, V> {
-
-        // collapse all explored trees back into shape
-        while !self.previous.is_empty()
-        {
-            let mut previous_tree = self.previous.pop().unwrap();
-
-            previous_tree.add_child_node(self.current.key.clone(), self.current);
-
-            self.current = previous_tree;
-        }
-        
-        return self.current;
-    }
-}
-
-// from https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
-// The output is wrapped in a Result to allow matching on errors.
-// Returns an Iterator to the Reader of the lines of the file.
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where P: AsRef<Path>, {
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
 }
